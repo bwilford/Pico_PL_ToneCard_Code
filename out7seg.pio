@@ -1,0 +1,59 @@
+.program	out7seg
+.side_set	2
+
+; Loop counter in x
+
+start:
+	set x 11		side 0
+	pull			side 0		; get 24 bits of data (from 32)
+
+; Loop 12 times
+
+loop1:
+	out pins 1		side 0		; Put data onto DIN pin, CLK = 0, LD = 0
+	jmp x-- loop1		side 1		; CLK = 1, LD = 0
+	set x 11		side 2		; CLK = 0, LD = 1
+
+; Loop 12 times
+
+loop2:
+	out pins 1		side 0		; Put data onto DIN pin, CLK = 0, LD = 0
+	jmp x-- loop2		side 1		; CLK = 1, LD = 0
+	jmp start		side 2		; CLK = 0, LD = 1
+
+% c-sdk {
+
+// #include "hardware/clocks.h"
+
+static inline void
+out7seg_program_init (PIO pio, uint sm, uint offset)
+	{
+	pio_sm_config	config;
+
+	// This program drives GPIO 16, 17, 18
+
+	pio_gpio_init (pio, MAX_CLK_GPIO);
+	pio_gpio_init (pio, MAX_LD_GPIO);
+	pio_gpio_init (pio, MAX_DIN_GPIO);
+
+	// Set 16, 17, 18 as outputs
+	pio_sm_set_consecutive_pindirs (pio, sm, MAX_CLK_GPIO, 3, true);
+
+	config = out7seg_program_get_default_config (offset);
+
+	sm_config_set_sideset_pins (&config, MAX_CLK_GPIO);
+	sm_config_set_out_pins (&config, MAX_DIN_GPIO, 1);
+
+	// Put the bits out high order bit first ... look at MAX7219 datasheet
+	sm_config_set_out_shift (&config, false, false, 32);	// No autopull
+	sm_config_set_fifo_join (&config, PIO_FIFO_JOIN_TX);
+
+	// Machine runs at 8nS clock cycle, so run MAX7219 at 80nS
+	sm_config_set_clkdiv (&config, 10.0);
+
+	pio_sm_init (pio, sm, offset, &config);
+	pio_sm_set_enabled (pio, sm, true);
+	}
+
+%}
+
